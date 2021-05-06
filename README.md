@@ -3,6 +3,10 @@
 
 ###Первый запуск
 
+#####Добавить ключи в энвайремент линукс
+$ export AWS_ACCESS_KEY_ID=(your access key id)
+$ export AWS_SECRET_ACCESS_KEY=(your secret access key)
+
 ````
 provider "aws" {
 region = "eu-west-3"
@@ -23,3 +27,7 @@ https://aws.amazon.com/ru/ec2/instance-types/
 Первичная иницилизация проекта терраформ.
 
 #####terraform plan
+соединяется с облаком и проверяет конфигурацию.
+
+#####terraform apply
+применяет конфигурацию на облако
