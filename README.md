@@ -31,3 +31,11 @@ https://aws.amazon.com/ru/ec2/instance-types/
 
 #####terraform apply
 применяет конфигурацию на облако
+
+
+#####добавили тег
+````
+tags = {
+Name = "terraform-example"
+}
+````
