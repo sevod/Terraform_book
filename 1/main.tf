@@ -2,6 +2,17 @@ provider "aws" {
   region = "us-east-2"
 }
 
+variable "server_port" {
+  description = "The port the server will use for HTTP requests"
+  type = number
+  default = 8080
+}
+
+output "public_ip" {
+  value = aws_instance.example.public_ip
+  description = "The public IP address of the web server"
+}
+
 resource "aws_instance" "example" {
   ami = "ami-0c55b159cbfafe1f0"
   instance_type = "t2.micro"
@@ -25,3 +36,4 @@ resource "aws_security_group" "instance" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
