@@ -192,3 +192,181 @@ output "public_ip" {
 
 #####terraform output public_ip
 Можно ввести в консоли и мы получим значение переменной public_ip
+
+
+###Развертывание кластера веб-серверов (стр. 86)
+
+#####ASG - auto scaling group
+
+#####aws_launch_configuration ресурс описывающий конфигурацию запуска
+используется вместо aws_instance и очень похож по настройкам
+
+#####aws_autoscaling_group ресурс описывающий ASG
+
+#####create_before_destroy - параметр жизненного цикла. 
+Говорит о том что сначало создаем новое, потом удаляем старое.
+
+C обновлением всех ссылок таким образом, чтобы они указывали на нее, а не
+на старый ресурс.
+
+Добавляем его в aws_launch_configuration.
+
+````
+lifecycle {
+	create_before_destroy = true
+}
+````
+
+
+#####subnet_ids - подсети VPS
+VPC - виртуальные частные облака (virtual private cloud, или VPC)
+
+Каждая подсеть находится в изолированной зоне доступности AWS (то есть в отдельном
+вычислительном центре)
+
+####источник данных (стр. 88)
+Источник данных представляет собой фрагмент информации, доступной сугубо для чтения, который извлекается из провайдера (в нашем случае из AWS).
+
+````
+data "<PROVIDER>_<TYPE>" "<NAME>" {
+ [CONFIG ...]
+}
+````
+NAME — идентификатор, с помощью которого можно ссылаться на этот источник данных в коде Terraform
+````
+data "aws_vpc" "default" {
+ default = true
+}
+````
+
+#### data.\<PROVIDER>_\<TYPE>.\<NAME>.\<ATTRIBUTE> - получение данных из источника данных
+`data.aws_vpc.default.id` - идентификатор VPC из источника данных aws_vpc
+
+####aws_subnet_ids (стр. 89) - источник данных. подсети внутри облака VPC
+````
+data "aws_subnet_ids" "default" {
+	vpc_id = data.aws_vpc.default.id
+}
+````
+
+####vpc_zone_identifier - аргумент чтобы ваша группа ASG использовала эти подсети
+Добавляем в aws_autoscaling_group
+````
+ launch_configuration = aws_launch_configuration.example.name
+ vpc_zone_identifier = data.aws_subnet_ids.default.ids
+````
+
+###Балансировщик нагрузки (стр. 90)
+
+####resource "aws_lb"
+
+####Типы балансировщиков
+- ALB
+- NLB
+- CLB
+````
+resource "aws_lb" "example" {
+	name = "terraform-asg-example"
+	load_balancer_type = "application"
+	subnets = data.aws_subnet_ids.default.ids
+	security_groups = [aws_security_group.alb.id]
+}
+````
+
+####resource "aws_lb_listener" - слушатель
+
+````
+resource "aws_lb_listener" "http" {
+	load_balancer_arn = aws_lb.example.arn
+	port = 80
+	protocol = "HTTP"
+	# По умолчанию возвращает простую страницу с кодом 404
+	default_action {
+		type = "fixed-response"
+		fixed_response {
+			content_type = "text/plain"
+			message_body = "404: page not found"
+			status_code = 404
+		}
+	}
+}
+````
+
+####Группа безопасности для балансировщика нагрузки
+
+````
+resource "aws_security_group" "alb" {
+  name = "terraform-example-alb"
+  # Разрешаем все входящие HTTP-запросы
+  ingress {
+    from_port = 80
+    to_port = 80
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  # Разрешаем все исходящие запросы
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+````
+
+и добавляем
+####security_groups = [aws_security_group.alb.id]
+
+####ресурс aws_lb_target_group - целевая группа для ASG 
+````
+resource "aws_lb_target_group" "asg" {
+  name = "terraform-asg-example"
+  port = var.server_port
+  protocol = "HTTP"
+  vpc_id = data.aws_vpc.default.id
+  health_check {
+    path = "/"
+    protocol = "HTTP"
+    matcher = "200"
+    interval = 15
+    timeout = 3
+    healthy_threshold = 2
+    unhealthy_threshold = 2
+  }
+}
+````
+
+Добавляем в aws_autoscaling_group
+
+````
+target_group_arns = [aws_lb_target_group.asg.arn]
+health_check_type = "ELB"
+````
+
+####параметр health_check_type, указывает тип проверки, по умолчанию "EC2"
+
+####ресурс aws_lb_listener_rule
+````
+resource "aws_lb_listener_rule" "asg" {
+  listener_arn = aws_lb_listener.http.arn
+  priority = 100
+  condition {
+    field = "path-pattern"
+    values = ["*"]
+  }
+  action {
+    type = "forward"
+    target_group_arn = aws_lb_target_group.asg.arn
+  }
+}
+````
+
+####Добавляем вывод dns имени
+````
+output "alb_dns_name" {
+ value = aws_lb.example.dns_name
+ description = "The domain name of the load balancer"
+}
+````
+
+###terraform destroy - удаление
