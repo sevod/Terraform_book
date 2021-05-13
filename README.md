@@ -465,6 +465,85 @@ resource "aws_instance" "example" {
 
 Создаю новую структуру папок и файлов в 3_stage (стр. 122)
 
+##Источник данных terraform_remote_state (стр. 123)
+Источник данных который особенно полезен при работе с состоянием.
 
+####RDS (Relational Database Service)
+stage/data-stores/mysql/main.tf:
 
+####aws_secretsmanager_secret_version - Хранение секретных паролей в сервисах AWS Secrets Manager (стр. 125)
+````
+password = data.aws_secretsmanager_secret_version.db_password.secret_string
+
+data "aws_secretsmanager_secret_version" "db_password" {
+ secret_id = "mysql-master-password-stage"
+}
+````
+
+####второй вариант секретных данных (стр. 126)
+создать переменную и брать из энвайремента. В данном случае `TF_VAR_db_password`
+````
+variable "db_password" {
+ description = "The password for the database"
+ type = string
+}
+````
+Применяем переменную и запускаем тераформ. 
+````
+$ export TF_VAR_db_password="(YOUR_DB_PASSWORD)"
+$terraform apply
+````
+
+####Добавляем выходные переменные sql конфиг, что бы их можно было получать везде
+````
+output "address" {
+ value = aws_db_instance.example.address
+ description = "Connect to the database at this endpoint"
+}
+output "port" {
+ value = aws_db_instance.example.port
+ description = "The port the database is listening on"
+}
+````
+подключаем бакет так:
+````
+data "terraform_remote_state" "db" {
+ backend = "s3"
+ config = {
+ bucket = "(YOUR_BUCKET_NAME)"
+ key = "stage/data-stores/mysql/terraform.tfstate"
+ region = "us-east-2"
+ }
+}
+````
+и получаем данные
+````
+echo "${data.terraform_remote_state.db.outputs.address}" >> index.html
+echo "${data.terraform_remote_state.db.outputs.port}" >> index.html
+````
+
+###Встроенные функции
+
+####terraform console - для тренировки (только для чтения)
+
+####format("%.3f", 3.14159265359) - одна из функций
+
+####file(<PATH>) - функция читает файл и возращает прочитаное в код терраформ
+создадим user-data.sh и будем его читать
+
+`file("user-data.sh")`
+
+####template_file (стр. 132)
+на вход принимает template и массив для замены vars
+`user_data =  data.template_file.user_data.rendered`
+````
+data "template_file" "user_data" {
+ template = file("user-data.sh")
+ vars = {
+ server_port = var.server_port
+ db_address = data.terraform_remote_state.db.outputs.address
+ db_port = data.terraform_remote_state.db.outputs.port
+ }
+}
+````
 

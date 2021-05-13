@@ -8,6 +8,17 @@ variable "server_port" {
   default = 8080
 }
 
+data "template_file" "user_data" {
+  template = file("user-data.sh")
+  vars = {
+    server_port = var.server_port
+    db_address = data.terraform_remote_state.db.outputs.address
+    db_port = data.terraform_remote_state.db.outputs.port
+  }
+}
+
+
+
 resource "aws_lb" "example" {
   name = "terraform-asg-example"
   load_balancer_type = "application"
@@ -114,14 +125,17 @@ resource "aws_launch_configuration" "example" {
   instance_type = "t2.micro"
   security_groups = [
     aws_security_group.instance.id]
-  user_data = <<-EOF
-    #!/bin/bash
-    echo "Hello, World" > index.html
-    echo "Hello, work" > work.html
-    mkdir work
-    echo "work" > work/work.html
-    nohup busybox httpd -f -p ${var.server_port} &
-    EOF
+  user_data =  data.template_file.user_data.rendered
+//  user_data = <<-EOF
+//    #!/bin/bash
+//    echo "Hello, World" > index.html
+//    echo "${data.terraform_remote_state.db.outputs.address}" >> index.html
+//    echo "${data.terraform_remote_state.db.outputs.port}" >> index.html
+//    echo "Hello, work" > work.html
+//    mkdir work
+//    echo "work" > work/work.html
+//    nohup busybox httpd -f -p ${var.server_port} &
+//    EOF
   # Требуется при использовании группы автомасштабирования
   # в конфигурации запуска.
   # https://www.terraform.io/docs/providers/aws/r/launch_configuration.html
@@ -154,5 +168,15 @@ terraform {
     # Замените это именем своей таблицы DynamoDB!
     dynamodb_table = "terraform-sevod-test-locks"
     encrypt = true
+  }
+}
+
+#данные с mysql
+data "terraform_remote_state" "db" {
+  backend = "s3"
+  config = {
+    bucket = "terraform-sevod-test-state"
+    key = "stage/data-stores/mysql/terraform.tfstate"
+    region = "us-east-2"
   }
 }
