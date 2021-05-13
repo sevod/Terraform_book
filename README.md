@@ -370,3 +370,97 @@ output "alb_dns_name" {
 ````
 
 ###terraform destroy - удаление
+
+##Гл. 3. Как управлять состоянием Terraform (стр. 100)
+
+####terraform_remote_state - Источник данных
+
+####файл состояния - /foo/bar/terraform.tfstate (не должен быть публичным)
+
+###Настройка S3 
+В новой папке aws_s3_bucket создаем новую конфигурацию терраформ
+
+####resource "aws_s3_bucket" это и есть наше хранилище (подробности в файле конфигурации в папке aws_s3_bucket)
+
+####resource "aws_dynamodb_table" таблица DynamoDB, будет использоваться для блокировок
+что бы использовать этот код, у вашего пользователя IAM должны быть права на создание бакетов S3 и таблиц DynamoDB (стр. 60)
+
+Делаем `terraform init` и S3 создан.
+
+###переносим локальное состояние в бакет
+
+####backend 
+для применения используем `terraform init`
+````
+terraform {
+ backend "s3" {
+ # Поменяйте это на имя своего бакета!
+ bucket = "terraform-up-and-running-state"
+ key = "global/s3/terraform.tfstate"
+ region = "us-east-2"
+ # Замените это именем своей таблицы DynamoDB!
+ dynamodb_table = "terraform-up-and-running-locks"
+ encrypt = true
+ }
+}
+````
+
+#####теперь Terraform устанавливает блокировку перед запуском команды apply и снимает ее после!
+
+####Удаление данного бакета
+1. Перейти к коду Terraform, удалить конфигурацию backend и снова выполнить
+   команду terraform init, чтобы скопировать состояние Terraform обратно на
+   локальный диск.
+2. Выполнить terraform destroy, чтобы удалить бакет S3 и таблицу DynamoDB
+
+###Переменные в backend (стр. 112)
+Мы не можем их там использовать, один из вариантов решения файл backend.hcl:
+````
+# backend.hcl
+bucket = "terraform-up-and-running-state"
+region = "us-east-2"
+dynamodb_table = "terraform-up-and-running-locks"
+encrypt = true
+````
+
+В самом терраформ мы оставляем только key
+````
+# Частичная конфигурация. Другие параметры (такие как bucket, region) будут
+# переданы команде 'terraform init' в виде файла с использованием
+# аргументов -backend-config
+terraform {
+   backend "s3" {
+      key = "example/terraform.tfstate"
+   }
+}
+````
+
+Для запуска: `$ terraform init -backend-config=backend.hcl`
+
+#####Terragrunt - сторонний инструмент для настройки backend
+
+###Изоляция файлов состояния (стр. 112)
+- Изоляция через рабочие области (стр. 113)
+- Изоляция с помощью описания структуры файлов (стр. 119)
+
+####Изоляция через рабочие области
+`terraform workspace`
+
+- `$ terraform workspace show`
+- `$ terraform workspace new example1`
+- `$ terraform workspace list` - список workspace
+- `$ terraform workspace select example1`
+
+`terraform.workspace` - получить значение workspace
+````
+resource "aws_instance" "example" {
+ ami = "ami-0c55b159cbfafe1f0"
+ instance_type = terraform.workspace == "default" ? "t2.medium" : "t2.micro"
+}
+````
+
+####Недостатки изоляции через рабочие области (стр. 119)
+
+###Изоляция с помощью описания структуры файлов(стр. 119)
+
+

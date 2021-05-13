@@ -75,7 +75,7 @@ resource "aws_lb_listener_rule" "asg" {
       values = ["*"]
     }
   }
-  //    field = "path-pattern"
+  //    field = "path-pattern" //устарело
   //    values = ["*"]
   action {
     type = "forward"
@@ -115,8 +115,8 @@ resource "aws_autoscaling_group" "example" {
     aws_lb_target_group.asg.arn]
   health_check_type = "ELB"
 
-  min_size = 2
-  max_size = 10
+  min_size = 1
+  max_size = 2
   tag {
     key = "Name"
     value = "terraform-asg-example"
@@ -132,6 +132,9 @@ resource "aws_launch_configuration" "example" {
   user_data = <<-EOF
     #!/bin/bash
     echo "Hello, World" > index.html
+    echo "Hello, work" > work.html
+    mkdir work
+    echo "work" > work/work.html
     nohup busybox httpd -f -p ${var.server_port} &
     EOF
   # Требуется при использовании группы автомасштабирования
